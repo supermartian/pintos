@@ -33,6 +33,7 @@ our ($loader_fn);		# Bootstrap loader.
 our (%geometry);		# IDE disk geometry.
 our ($align);			# Partition alignment.
 our ($fake_usb) = 0;		# Use fake USB disks instead of IDE?
+our ($network) = 0;		# Enabling network support 
 
 parse_command_line ();
 prepare_scratch_disk ();
@@ -97,13 +98,14 @@ sub parse_command_line {
 		    "disk=s" => sub { set_disk ($_[1]); },
 		    "loader=s" => \$loader_fn,
 		    "fake-usb" => \$fake_usb,
+		    "network" => sub { $network = 1;},
 
 		    "geometry=s" => \&set_geometry,
 		    "align=s" => \&set_align)
 	  or exit 1;
     }
 
-    $sim = "bochs" if !defined $sim;
+    $sim = "qemu" if !defined $sim;
     $debug = "none" if !defined $debug;
     $vga = exists ($ENV{DISPLAY}) ? "window" : "none" if !defined $vga;
 
@@ -643,7 +645,6 @@ sub run_qemu {
     print "warning: qemu doesn't support jitter\n"
       if defined $jitter;
     my (@cmd) = ('qemu');
-    push (@cmd, '-no-kqemu');
     if ($fake_usb) {
 	push (@cmd, '-hda', $disks[0]) if defined $disks[0];
 	push (@cmd, '-usb');
@@ -655,12 +656,14 @@ sub run_qemu {
 	push (@cmd, '-hdd', $disks[3]) if defined $disks[3];
     }
     push (@cmd, '-m', $mem);
-    push (@cmd, '-net', 'none');
     push (@cmd, '-nographic') if $vga eq 'none';
     push (@cmd, '-serial', 'stdio') if $serial && $vga ne 'none';
     push (@cmd, '-S') if $debug eq 'monitor';
     push (@cmd, '-s', '-S') if $debug eq 'gdb';
     push (@cmd, '-monitor', 'null') if $vga eq 'none' && $debug eq 'none';
+    push (@cmd, '-net','none') if $network == 0;
+    push (@cmd, '-device','e1000,netdev=pinet0','-netdev','tap,id=pinet0') if $network == 1;
+    unshift (@cmd, 'sudo') if $network == 1;  # Running network in tap mode needs the permission of root.
     run_command (@cmd);
 }
 
